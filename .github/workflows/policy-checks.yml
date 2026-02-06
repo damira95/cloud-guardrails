@@ -1,0 +1,40 @@
+name: Policy checks
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  conftest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install conftest
+        run: |
+          set -e
+          CONFTEST_VERSION="0.56.0"
+          OS="linux"
+          ARCH="x86_64"
+
+          curl -L -o conftest.tar.gz \
+            https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_${OS}_${ARCH}.tar.gz
+          tar -xzf conftest.tar.gz
+          chmod +x conftest
+          ./conftest --version
+
+      - name: Run policy tests (skip if no rego)
+        working-directory: 01-eks-gatekeeper
+        run: |
+          set -e
+          if find policies -type f -name "*.rego" | grep -q .; then
+            echo "✅ Rego policies found. Running conftest..."
+            ../conftest test tests --policy policies
+          else
+            echo "⚠️ No Rego policies found under policies/. Skipping conftest."
+            echo "Gatekeeper YAML != Conftest Rego — нормал."
+          fi
