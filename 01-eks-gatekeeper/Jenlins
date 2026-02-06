@@ -1,0 +1,71 @@
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  triggers {
+    githubPush()
+  }
+
+  environment {
+    CONFTEST_VERSION = "0.56.0"
+  }
+
+  stages {
+
+    stage('Checkout Code') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Install Conftest') {
+      steps {
+        sh '''
+          set -e
+
+          OS=$(uname | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+
+          if [ "$ARCH" = "x86_64" ]; then
+            ARCH="x86_64"
+          elif [ "$ARCH" = "aarch64" ]; then
+            ARCH="arm64"
+          fi
+
+          echo "Detected OS=$OS ARCH=$ARCH"
+
+          curl -L -o conftest.tar.gz \
+          https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_${OS}_${ARCH}.tar.gz
+
+          tar -xzf conftest.tar.gz
+          chmod +x conftest
+          ./conftest --version
+        '''
+      }
+    }
+
+    stage('Run Policy Tests') {
+      steps {
+        sh '''
+          ./conftest test tests --policy policies
+        '''
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Policy checks PASSED"
+    }
+    failure {
+      echo "❌ Policy checks FAILED"
+    }
+    always {
+      cleanWs()
+    }
+  }
+}
